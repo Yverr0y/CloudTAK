@@ -245,6 +245,46 @@ export const CoreEventBoardEventResponse = Type.Object({
     event: CoreEventResponse,
 });
 
+export const CoreFormResponse = Type.Object({
+    id: Type.String(),
+    created: Type.String(),
+    updated: Type.String(),
+    username: Type.Union([Type.Null(), Type.String()], { description: 'Author of the Form' }),
+    name: Type.String(),
+    description: Type.String(),
+    schema: Type.Record(Type.String(), Type.Unknown(), { description: 'JSON Schema the Form input is generated & validated from' }),
+    channels: Type.Array(Type.Integer(), { description: 'TAK Server Channels the Form is shared with' }),
+});
+
+export const CoreFormResponseResponse = Type.Object({
+    id: Type.String(),
+    created: Type.String(),
+    updated: Type.String(),
+    form: Type.String({ description: 'Form the Response was submitted against' }),
+    username: Type.Union([Type.Null(), Type.String()], { description: 'User that submitted the Response' }),
+    response: Type.Record(Type.String(), Type.Unknown(), { description: 'Submitted data validated against the Form schema' }),
+    events: Type.Array(Type.String(), { description: 'Core Events the Response is linked to' }),
+});
+
+/** A Response linked to a Core Event, with the Form it was submitted against embedded */
+export const CoreEventFormResponse = Type.Object({
+    id: Type.String(),
+    created: Type.String(),
+    updated: Type.String(),
+    username: Type.Union([Type.Null(), Type.String()], { description: 'User that submitted the Response' }),
+    response: Type.Record(Type.String(), Type.Unknown(), { description: 'Submitted data validated against the Form schema' }),
+    form: CoreFormResponse,
+});
+
+export const CoreFormColumnResponse = Type.Object({
+    id: Type.String(),
+    created: Type.String(),
+    updated: Type.String(),
+    column: Type.String({ description: 'Board Column the Form is attached to' }),
+    required: Type.Boolean({ description: 'Must the Form be completed for Events in the Column' }),
+    form: CoreFormResponse,
+});
+
 export const CoreDeviceResponse = Type.Object({
     id: Type.String(),
     created: Type.String(),
@@ -343,6 +383,14 @@ export const ServerResponse = Type.Object({
     })),
 });
 
+export const CertificateResponse = Type.Object({
+    subject: Type.String(),
+    validFrom: Type.String(),
+    validTo: Type.String(),
+}, {
+    description: 'Public metadata of an X509 certificate - clients derive expiry state from validTo',
+});
+
 export const ProfileListResponse = Type.Object({
     username: Type.String(),
     created: Type.String(),
@@ -353,6 +401,7 @@ export const ProfileListResponse = Type.Object({
     }),
     system_admin: Type.Boolean(),
     agency_admin: Type.Array(Type.Integer()),
+    certificate: Type.Optional(CertificateResponse),
 });
 
 export const Profile = Type.Object({
@@ -583,11 +632,7 @@ export const ConnectionResponse = Type.Object({
     id: Type.Integer(),
     status: Type.String(),
     agency: Type.Optional(Type.Union([Type.Null(), Type.Integer()])),
-    certificate: Type.Object({
-        subject: Type.String(),
-        validFrom: Type.String(),
-        validTo: Type.String(),
-    }),
+    certificate: CertificateResponse,
     created: Type.String(),
     updated: Type.String(),
     readonly: Type.Boolean(),

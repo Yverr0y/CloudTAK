@@ -1,7 +1,7 @@
 {
     "name": "@tak-ps/CloudTAK.api",
     "type": "module",
-    "version": "13.70.0",
+    "version": "13.72.1",
     "description": "Facilitate ETL operations to bring non-TAK sources into a TAK Server",
     "main": "index.js",
     "scripts": {
@@ -28,7 +28,7 @@
         "url": "git+https://github.com/dfpc-coe/CloudTAK.git"
     },
     "author": "Nick Ingalls <nick@ingalls.ca>",
-    "license": "ISC",
+    "license": "AGPL-3.0-only",
     "dependencies": {
         "@archiver/archiver": "^0.1.0",
         "@aws-sdk/client-cloudformation": "^3.279.0",

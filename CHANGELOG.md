@@ -17,6 +17,18 @@
 
 ### Pending Release
 
+### v13.72.1 - 2026-08-24
+
+- :bug: Fix Injector Deletion - Closes dfpc-coe/CloudTAK#1687
+
+### v13.72.0 - 2026-08-24
+
+- :tada: Add certificate information to User APIs
+
+### v13.71.0 - 2026-08-24
+
+- :tada: Introduce concept of Forms & requirements on an Event Board column
+
 ### v13.70.0 - 2026-08-19
 
 - :tada: Allow a server admin to specify Basemap Favourites
