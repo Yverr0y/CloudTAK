@@ -614,7 +614,7 @@ export const Layer = pgTable('layers', {
     memory: integer().notNull().default(256),
     timeout: integer().notNull().default(120),
 
-    permissions: text().array(),
+    permissions: text().array().notNull().default([]),
 
     alarm_period: integer().notNull().default(30),
     alarm_evals: integer().notNull().default(5),
@@ -629,6 +629,7 @@ export const LayerOutgoing = pgTable('layers_outgoing', {
     updated: timestamp({ withTimezone: true, mode: 'string' }).notNull().default(sql`Now()`),
 
     filters: jsonb().$type<Static<typeof FilterContainer>>().notNull().default({}),
+    subscriptions: text().array().notNull().default([]),
 
     environment: jsonb().notNull().default({}),
     ephemeral: jsonb().$type<Record<string, any>>().notNull().default({}),
