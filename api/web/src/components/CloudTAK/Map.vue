@@ -1,11 +1,10 @@
 <template>
     <div
-        class='d-flex position-relative'
+        class='d-flex position-relative map-shell'
         style='height: calc(100vh) !important;'
         :style='{
             "--map-side-offset": `${mapSideOffset}px`,
-            "--map-compact-menu-size": "60px",
-            "--map-bottom-bar-size": "50px"
+            "--map-compact-menu-size": "60px"
         }'
         data-bs-theme-base='neutral'
         data-bs-theme-primary='blue'
@@ -38,7 +37,8 @@
 
             <WarnConfiguration
                 v-if='warnConfiguration'
-                @close='warnConfiguration = false'
+                :page='warnConfiguration'
+                @close='warnConfiguration = undefined'
             />
             <WarnChannels
                 v-else-if='warnChannels'
@@ -46,7 +46,7 @@
             />
 
             <DrawOverlay
-                v-if='mapStore.draw.mode !== DrawToolMode.STATIC'
+                v-if='isDrawing'
             />
 
             <GeoJSONInput
@@ -94,17 +94,18 @@
                     </div>
                 </div>
             </GenericBottomPane>
-            <BottomBar
+            <GPSPanel
                 :mode='mode'
                 @set-location='setLocation'
                 @to-location='toLocation'
             />
+            <PluginPane v-if='mode === "Default" && !isDrawing' />
             <div
                 v-if='mapStore.selected.size'
                 class='position-absolute'
                 style='
-                    bottom: calc(var(--map-bottom-bar-size, 50px) + 8px);
-                    left: 8px;
+                    bottom: calc(var(--map-gps-panel-size, 84px) + 16px + var(--map-bottom-inset, 0px));
+                    left: calc(8px + env(safe-area-inset-left, 0px));
                 '
             >
                 <SelectFeats :selected='mapStore.selected' />
@@ -231,7 +232,7 @@
                         tabindex='0'
                         :title='mapStore.terrainEnabled ? "Disable 3D Terrain" : "Enable 3D Terrain"'
                         class='cloudtak-ctrl-btn'
-                        @click='mapStore.terrainEnabled ? mapStore.removeTerrain() : mapStore.addTerrain()'
+                        @click='mapStore.toggleTerrain()'
                     >
                         <IconMountain
                             :size='24'
@@ -378,8 +379,8 @@
                 class='position-absolute'
                 style='
                     z-index: 4;
-                    bottom: var(--map-bottom-bar-size, 50px);
-                    right: 0;
+                    bottom: var(--map-bottom-inset, 0px);
+                    right: env(safe-area-inset-right, 0px);
                     padding: 8px;
                 '
             >
@@ -450,7 +451,8 @@
 import GeoJSONInput from './Inputs/GeoJSONInput.vue';
 import BufferInput from './Inputs/BufferInput.vue';
 import { ref, watch, computed, toRaw, onMounted, onBeforeUnmount, useTemplateRef } from 'vue';
-import BottomBar from './BottomBar/BottomBar.vue';
+import GPSPanel from './GPSPanel/GPSPanel.vue';
+import PluginPane from './PluginPane.vue';
 import {useRoute, useRouter } from 'vue-router';
 import ActiveMission from './ActiveMission.vue';
 import Navigating from './Navigating.vue';
@@ -459,6 +461,7 @@ import WarnChannels from './util/WarnChannels.vue';
 import Notifications from './Notifications.vue';
 import SearchBox from './util/SearchBox.vue';
 import WarnConfiguration from './util/WarnConfiguration.vue';
+import type { WarnConfigurationPage } from './util/WarnConfiguration.vue';
 import DrawTools from './DrawTools.vue';
 import GenericBottomPane from './GenericBottomPane.vue';
 import type { MapGeoJSONFeature, LngLatLike, MapMouseEvent } from 'maplibre-gl';
@@ -502,6 +505,7 @@ import MapLoading from './MapLoading.vue';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import RadialMenu from './RadialMenu/RadialMenu.vue';
 import { useMapStore } from '../../stores/map.ts';
+import { useDeviceStore } from '../../stores/device.ts';
 import { useAppStore } from '../../stores/app.ts';
 import { DrawToolMode } from '../../stores/modules/draw.ts';
 import { useFloatStore } from '../../stores/float.ts';
@@ -509,22 +513,20 @@ import { liveQuery } from 'dexie';
 import Upload from '../util/Upload.vue';
 import { stdurl } from '../../std.ts';
 import ProfileConfig from '../../base/profile.ts';
-import Config from '../../base/config.ts';
+import OverlayManager from '../../base/overlay.ts';
 import { cutOverlayFeature } from './util/featureCut.ts';
 import { isNativePlatform, isIOSPlatform, addBackgroundStateListener } from '../../utils/capacitor.ts';
 import { copyFeatureToClipboard, readFeatureFromClipboard } from '../../stores/device/clipboard.ts';
 import MissionInviteModal from './Menu/Mission/MissionInviteModal.vue';
 
 const mapStore = useMapStore();
+const deviceStore = useDeviceStore();
 const appStore = useAppStore();
 const floatStore = useFloatStore();
 
 const isIOS = isIOSPlatform();
 
-const hasTerrain = ref<boolean>(false);
-Config.list(['map::terrain'], { defaults: { 'map::terrain': null } }).then((cfg) => {
-    hasTerrain.value = cfg['map::terrain'] !== null && cfg['map::terrain'] !== undefined;
-}).catch(() => { /* non-fatal */ });
+const hasTerrain = computed(() => OverlayManager.loaded.some((overlay) => overlay.type === 'raster-dem'));
 const router = useRouter();
 const route = useRoute();
 
@@ -539,7 +541,7 @@ appStore.isMobileDetected = detectMobile();
 
 const warnChannels = ref<boolean>(false)
 
-const warnConfiguration = ref<boolean>(false);
+const warnConfiguration = ref<WarnConfigurationPage | undefined>();
 
 const searchBoxShown = ref(false);
 
@@ -612,6 +614,10 @@ function detectMobile() {
 
 const isMobileDetected = computed(() => {
     return detectMobile();
+});
+
+const isDrawing = computed(() => {
+    return mapStore.draw.mode !== DrawToolMode.STATIC;
 });
 
 watch(isMobileDetected, () => {
@@ -726,7 +732,11 @@ onMounted(async () => {
 
     // TODO these are no longer reactive, does it matter?
     warnChannels.value = await mapStore.worker.profile.hasNoChannels();
-    warnConfiguration.value = await mapStore.worker.profile.hasNoConfiguration();
+    if (await mapStore.worker.profile.hasNoConfiguration()) {
+        warnConfiguration.value = 'details';
+    } else if (!deviceStore.hasRequiredPermissions()) {
+        warnConfiguration.value = 'permissions';
+    }
 
     loading.value = false;
 
@@ -845,6 +855,7 @@ function setLocation() {
 }
 
 function cancelLocationSetting() {
+    mapStore.manualLocationMode = false;
     mode.value = 'Default';
     mapStore.map.getCanvas().style.cursor = '';
 
@@ -1147,9 +1158,14 @@ html[data-bs-theme='light'] .cloudtak-ctrl-btn:focus-within {
     bottom: 1px;
 }
 
+.map-shell {
+    --map-gps-panel-size: 84px;
+    --map-bottom-inset: env(safe-area-inset-bottom, 0px);
+}
+
 .maplibregl-ctrl-bottom-left {
-    bottom: calc(var(--map-bottom-bar-size, 50px) + 4px);
-    left: 8px;
+    bottom: calc(var(--map-gps-panel-size, 84px) + 12px + var(--map-bottom-inset, 0px));
+    left: calc(8px + env(safe-area-inset-left, 0px));
     right: auto;
     margin: 0;
     z-index: 3 !important;
@@ -1157,8 +1173,8 @@ html[data-bs-theme='light'] .cloudtak-ctrl-btn:focus-within {
 }
 
 .maplibregl-ctrl-bottom-right {
-    bottom: calc(var(--map-bottom-bar-size, 50px) + 4px);
-    right: calc(var(--map-side-offset, 0px) + 8px);
+    bottom: calc(4px + var(--map-bottom-inset, 0px));
+    right: calc(var(--map-side-offset, 0px) + 8px + env(safe-area-inset-right, 0px));
     left: auto;
     z-index: 3 !important;
     color: black !important;
@@ -1186,11 +1202,11 @@ html[data-bs-theme='light'] .use-gps-btn {
 
 @media (max-width: 600px) {
     .maplibregl-ctrl-bottom-left {
-        left: 4px;
+        left: calc(4px + env(safe-area-inset-left, 0px));
     }
 
     .maplibregl-ctrl-bottom-right {
-        right: 58px;
+        right: calc(58px + env(safe-area-inset-right, 0px));
     }
 }
 </style>

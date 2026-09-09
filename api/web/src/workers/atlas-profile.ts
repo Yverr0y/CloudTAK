@@ -14,7 +14,7 @@ import COT from '../base/cot.ts';
  * semi-transparent `<color>` detail native clients never produce for a team
  * member - they rely solely on `<__group>`
  */
-const SELF_STYLE_PROPERTIES = ['marker-color', 'marker-opacity', 'icon-opacity', 'icon'] as const;
+const SELF_STYLE_PROPERTIES = ['marker-color', 'marker-opacity', 'icon-opacity', 'icon', 'marker-stroke-color'] as const;
 
 export type ProfileLocationState = {
     source: LocationState
@@ -470,6 +470,20 @@ export default class AtlasProfile {
             this.atlas.postMessage({
                 type: WorkerMessageType.Profile_Distance_Unit,
                 body: { unit: body.display_distance }
+            });
+        }
+
+        if (body.display_elevation) {
+            this.atlas.postMessage({
+                type: WorkerMessageType.Profile_Elevation_Unit,
+                body: { unit: body.display_elevation }
+            });
+        }
+
+        if (body.display_speed) {
+            this.atlas.postMessage({
+                type: WorkerMessageType.Profile_Speed_Unit,
+                body: { unit: body.display_speed }
             });
         }
 

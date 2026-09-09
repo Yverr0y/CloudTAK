@@ -7,6 +7,7 @@ import { bbox } from '@turf/bbox'
 import { length } from '@turf/length'
 import { isEqual } from '@ver0/deep-equal';
 import { WorkerMessageType } from '../utils/events.ts'
+import { TEAM_COLORS, strokeColorFor } from '../utils/team-colors.ts';
 import pointOnFeature from '@turf/point-on-feature';
 import { applyEllipseMutation } from './cot/ellipse.ts';
 import type { COTMutation, COTUpdate } from './cot/types.ts';
@@ -42,6 +43,7 @@ export const RENDERED_PROPERTIES = [
     'stroke-style',
     'stroke-width',
     'marker-color',
+    'marker-stroke-color',
     'marker-radius',
     'marker-opacity',
     'circle-color',
@@ -290,6 +292,8 @@ export default class COT {
                 if (isEqual(this.properties, update.properties)) {
                     delete update.properties
                 } else {
+                    const renderedBefore = renderedIcon(this._properties);
+
                     for (const prop of RENDERED_PROPERTIES) {
                         if (this._properties[prop] !== update.properties[prop]) {
                             visuallyChanged = true;
@@ -297,7 +301,24 @@ export default class COT {
                         }
                     }
 
+                    // Object.assign cannot remove a key - a type change must drop
+                    // the type-derived milicon & icon or they outrank the new type
+                    // in renderedIcon and the old symbol stays on the map
+                    if (update.properties.type && update.properties.type !== this._properties.type) {
+                        delete this._properties.milicon;
+
+                        if (this._properties.icon && !this._properties.icon.includes(':')) {
+                            delete this._properties.icon;
+                        }
+                    }
+
                     Object.assign(this._properties, update.properties);
+
+                    // The rendered icon derives from type/milicon which are not
+                    // RENDERED_PROPERTIES themselves
+                    if (renderedIcon(this._properties) !== renderedBefore) {
+                        visuallyChanged = true;
+                    }
                 }
             }
 
@@ -667,35 +688,9 @@ export default class COT {
             if (properties.group) {
                 properties['icon-opacity'] = 0;
 
-                if (properties.group.name === 'Yellow') {
-                    properties["marker-color"] = '#f59f00';
-                } else if (properties.group.name === 'Orange') {
-                    properties["marker-color"] = '#f76707';
-                } else if (properties.group.name === 'Magenta') {
-                    properties["marker-color"] = '#ea4c89';
-                } else if (properties.group.name === 'Red') {
-                    properties["marker-color"] = '#d63939';
-                } else if (properties.group.name === 'Maroon') {
-                    properties["marker-color"] = '#bd081c';
-                } else if (properties.group.name === 'Purple') {
-                    properties["marker-color"] = '#ae3ec9';
-                } else if (properties.group.name === 'Dark Blue') {
-                    properties["marker-color"] = '#0054a6';
-                } else if (properties.group.name === 'Blue') {
-                    properties["marker-color"] = '#4299e1';
-                } else if (properties.group.name === 'Cyan') {
-                    properties["marker-color"] = '#17a2b8';
-                } else if (properties.group.name === 'Teal') {
-                    properties["marker-color"] = '#0ca678';
-                } else if (properties.group.name === 'Green') {
-                    properties["marker-color"] = '#74b816';
-                } else if (properties.group.name === 'Dark Green') {
-                    properties["marker-color"] = '#2fb344';
-                } else if (properties.group.name === 'Brown') {
-                    properties["marker-color"] = '#dc4e41';
-                } else {
-                    properties["marker-color"] = '#ffffff';
-                }
+                const markerColor = TEAM_COLORS[properties.group.name] ?? '#FFFFFF';
+                properties['marker-color'] = markerColor;
+                properties['marker-stroke-color'] = strokeColorFor(markerColor);
             } else if (properties.icon) {
                 // Format of icon needs to change for spritesheet
                 if (!properties.icon.includes(':')) {

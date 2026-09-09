@@ -2,7 +2,6 @@ import { liveQuery, type Observable } from 'dexie';
 import { shallowReactive } from 'vue';
 import { db, type DBOverlay } from '../database.ts';
 import type { paths } from '@cloudtak/api-types';
-import type { ProfileOverlay } from '../types.ts';
 import { server } from '../std.ts';
 import BaseInterface from './interface.ts';
 import Overlay from './overlay-class.ts';
@@ -111,15 +110,41 @@ export default class OverlayManager extends BaseInterface {
         const post = postId === undefined ? undefined : this.loadedFrom(postId);
         overlay.moveBefore(post);
 
-        for (const current of this.loaded) {
-            await current.update({
-                pos: orderedIds.indexOf(current.id)
-            });
-        }
-
-        this.loaded.sort((a, b) => {
-            return a.pos - b.pos;
+        const changed = this.loaded.filter((current) => {
+            const pos = orderedIds.indexOf(current.id);
+            if (pos === -1 || pos === current.pos) return false;
+            current.pos = pos;
+            return true;
         });
+
+        this.loaded.sort((a, b) => a.pos - b.pos);
+
+        const results = await Promise.allSettled(changed.map((current) => current.save()));
+        const failed = results.find((result): result is PromiseRejectedResult => result.status === 'rejected');
+        if (failed) throw failed.reason;
+    }
+
+    /**
+     * Move every loaded overlay's map layers so their stacking matches the
+     * `loaded` order (index 0 at the bottom)
+     */
+    static applyLoadedOrder(): void {
+        for (let i = this.loaded.length - 1; i >= 0; i--) {
+            this.loaded[i].moveBefore(this.loaded[i + 1]);
+        }
+    }
+
+    /**
+     * First renderable layer id of the overlay stacked directly above the
+     * given one - used to re-insert its layers at the same position
+     */
+    static loadedBeforeOverlay(overlay: Overlay): string | undefined {
+        const idx = this.loaded.indexOf(overlay);
+        if (idx === -1) return undefined;
+
+        const next = this.loaded[idx + 1];
+        const anchor = next?.styles.find((l) => l.type !== 'background');
+        return anchor ? String(anchor.id) : undefined;
     }
 
     static async deleteLoaded(idOrOverlay: string | number | Overlay): Promise<void> {
@@ -134,7 +159,11 @@ export default class OverlayManager extends BaseInterface {
 
     static queryableOverlayNames(): string[] {
         return this.loaded
-            .filter((overlay) => overlay.actions.feature.includes('query') || overlay.id === -1)
+            .filter((overlay) => {
+                return overlay.id === -1
+                    || (overlay.mode === 'mission' && overlay.mode_id)
+                    || overlay.actions.feature.includes('query');
+            })
             .map((overlay) => overlay.name);
     }
 
@@ -228,7 +257,7 @@ export default class OverlayManager extends BaseInterface {
         });
     }
 
-    static async get(id: string | number): Promise<ProfileOverlay> {
+    static async get(id: string | number): Promise<DBOverlay> {
         const overlayId = this.overlayId(id);
         const res = await server.GET('/api/profile/overlay/{:overlay}', {
             params: {
@@ -243,12 +272,12 @@ export default class OverlayManager extends BaseInterface {
 
         await db.overlay.put(res.data as DBOverlay);
 
-        return res.data;
+        return res.data as DBOverlay;
     }
 
     static async generate(
         body: paths['/api/profile/overlay']['post']['requestBody']['content']['application/json']
-    ): Promise<ProfileOverlay> {
+    ): Promise<DBOverlay> {
         const res = await server.POST('/api/profile/overlay', {
             body
         });
@@ -258,7 +287,7 @@ export default class OverlayManager extends BaseInterface {
 
         await db.overlay.put(res.data as DBOverlay);
 
-        return res.data;
+        return res.data as DBOverlay;
     }
 
     static async update(

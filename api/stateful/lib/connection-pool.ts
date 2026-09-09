@@ -123,12 +123,17 @@ export class ConnectionClient {
  * Maintain a pool of TAK Connections, reconnecting as necessary
  * @class
  */
+export const CONNECTION_LINGER_MS = 60000;
+
 export default class ConnectionPool extends Map<number | string, ConnectionClient> {
     config: ConfigStateful;
     sinks: Sinks;
     importControl: ImportControl;
     closed: boolean;
     pending: Map<number | string, Promise<ConnectionClient>>;
+
+    // Connections scheduled for teardown by deleteLater()
+    lingering: Map<number | string, ReturnType<typeof setTimeout>>;
 
     /**
      * In Low Bandwith environments the WebSocket can persist
@@ -144,6 +149,7 @@ export default class ConnectionPool extends Map<number | string, ConnectionClien
 
         this.closed = false;
         this.pending = new Map();
+        this.lingering = new Map();
         this.config = config;
         this.importControl = new ImportControl(config);
 
@@ -175,25 +181,14 @@ export default class ConnectionPool extends Map<number | string, ConnectionClien
 
         clearInterval(this.pingInterval);
 
+        for (const timer of this.lingering.values()) clearTimeout(timer);
+        this.lingering.clear();
+
         for (const conn of this.values()) {
             conn.destroy();
         }
 
         this.clear();
-    }
-
-    async subscription(connection: number | string, name: string): Promise<{
-        name: string;
-        token?: string;
-    }> {
-        const conn = this.get(connection);
-        if (!conn) return { name: name };
-        const sub = await conn.config.subscription(name);
-        if (!sub) return { name: name };
-        return {
-            name: sub.name,
-            token: sub.token || undefined,
-        };
     }
 
     async activeChannels(connection: number | string, fallbackApi?: TAKAPI): Promise<Set<number>> {
@@ -468,7 +463,7 @@ export default class ConnectionPool extends Map<number | string, ConnectionClien
         const connClient = new ConnectionClient(connConfig, tak, api);
         this.set(connConfig.id, connClient);
 
-        if (isCoreEventSubmitter(connConfig)) {
+        if (!this.config.noconnections && isCoreEventSubmitter(connConfig)) {
             connConfig.startEvents(tak, api);
         }
 
@@ -487,30 +482,36 @@ export default class ConnectionPool extends Map<number | string, ConnectionClien
             await connClient.refreshChannels();
             await this.loadGeofences(connConfig);
 
-            for (const sub of await connConfig.subscriptions()) {
-                let retry = true;
-                do {
-                    try {
-                        await api.Mission.subscribe(sub.name, {
-                            uid: connConfig.uid(),
-                        }, {
-                            token: sub.token || undefined,
-                        });
+            // Async event listeners must not leak rejections - the pool may
+            // be closed while the subscription query is in flight
+            try {
+                for (const sub of await connConfig.subscriptions()) {
+                    let retry = true;
+                    do {
+                        try {
+                            await api.Mission.subscribe(sub.guid || sub.name, {
+                                uid: connConfig.uid(),
+                            }, {
+                                token: sub.token || undefined,
+                            });
 
-                        console.log(`Connection: ${connConfig.id} - Sync: ${sub.name}: Subscribed!`);
-                        retry = false;
-                    } catch (err) {
-                        console.warn(`Connection: ${connConfig.id} (${connConfig.uid()}) - Sync: ${sub.name}: ${err instanceof Error ? err.message : String(err)}`);
-
-                        if (err instanceof Error && err.message.includes('ECONNREFUSED')) {
-                            await delay(1000);
-                        } else {
-                            // We don't retry for unknown issues as it could be the Sync has been remotely deleted and will
-                            // retry forwever
+                            console.log(`Connection: ${connConfig.id} - Sync: ${sub.name}: Subscribed!`);
                             retry = false;
+                        } catch (err) {
+                            console.warn(`Connection: ${connConfig.id} (${connConfig.uid()}) - Sync: ${sub.name}: ${err instanceof Error ? err.message : String(err)}`);
+
+                            if (err instanceof Error && err.message.includes('ECONNREFUSED')) {
+                                await delay(1000);
+                            } else {
+                                // We don't retry for unknown issues as it could be the Sync has been remotely deleted and will
+                                // retry forwever
+                                retry = false;
+                            }
                         }
-                    }
-                } while (retry);
+                    } while (retry);
+                }
+            } catch (err) {
+                console.error(`not ok - ${connConfig.id} - ${connConfig.name} - failed to load mission subscriptions: ${err instanceof Error ? err.message : String(err)}`);
             }
         }).on('close', async () => {
             connClient.secure = false;
@@ -595,7 +596,40 @@ export default class ConnectionPool extends Map<number | string, ConnectionClien
         connClient.retrying = false;
     }
 
+    /**
+     * Keep a connection alive briefly after its last WebSocket closes - a
+     * mobile client returning from the background reconnects within seconds
+     * and would otherwise pay for a full TLS handshake every time
+     */
+    deleteLater(id: number | string, delayMs = CONNECTION_LINGER_MS): void {
+        this.keep(id);
+
+        const timer = setTimeout(() => {
+            this.lingering.delete(id);
+            // The hub seeds an empty client list before auth, so presence alone is not enough
+            if ((this.config.wsClients.get(String(id)) || []).length) return;
+            this.delete(id);
+        }, delayMs);
+        timer.unref();
+
+        this.lingering.set(id, timer);
+    }
+
+    /**
+     * Cancel a pending deleteLater()
+     */
+    keep(id: number | string): boolean {
+        const timer = this.lingering.get(id);
+        if (!timer) return false;
+
+        clearTimeout(timer);
+        this.lingering.delete(id);
+        return true;
+    }
+
     delete(id: number | string): boolean {
+        this.keep(id);
+
         const conn = this.get(id);
 
         if (conn) {

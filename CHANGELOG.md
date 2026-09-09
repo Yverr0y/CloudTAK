@@ -17,6 +17,122 @@
 
 ### Pending Release
 
+### v13.81.1 - 2026-09-09
+
+- :bug: Ensure Draw Tools is shown instead of GPS component
+
+### v13.81.0 - 2026-09-09
+
+- :tada: Populate Outgoing Layer `subscriptions` from the task Capabilities manifest when a Layer or Outgoing config is created and when the task version changes
+- :tada: Show read-only Outgoing subscriptions in the Layer Outgoing Config panel and only offer Exclusion Filters when a `feature` type is subscribed
+- :bug: `api/context` now exits with an error when the dump or database load fails instead of starting the dev server on a stale database
+
+### v13.80.0 - 2026-09-09
+
+- :rocket: Update WarnConfiguration component to also ensure base permissions are assigned and be compliant with Google Play store requirements
+
+### v13.79.3 - 2026-09-08
+
+- :bug: Fix white text in light theme
+
+### v13.79.2 - 2026-09-08
+
+- :arrow_up: Update BackgroundGeolocation
+
+### v13.79.1 - 2026-09-07
+
+- :bug: More resilient location reporting after background resume on iOS
+
+### v13.79.0 - 2026-09-07
+
+- :tada: Prelim offline file support
+- :tada: Navigation now supports Point features - the `Navigate` button appears on Point CoTs and the routing control draws a straight line from the user's location to the destination, updated as the location changes. The `Reverse Direction` control is hidden in point mode
+- :tada: Add `Navigate` buttons to `FeatView` (Overlay/Basemap features) and `QueryView` (Query Mode coordinates) for straight-line navigation to non-CoT locations
+
+### v13.78.2 - 2026-09-03
+
+- :white_check_mark: Increase Test Speed
+- :rocket: Add App icon
+- :tada: Allow Lasso Select to choose a Data Sync in the Layer Selection dropdown and select its features
+
+### v13.78.1 - 2026-09-03
+
+- :bug: Fix CoT w/ Attachment sharing to Data Sync
+- :bug: Map Icon didn't reflect CoT 2525E type if a new type was selected
+- :bug: UI tweaks to attachment pane
+
+### v13.78.0 - 2026-09-02
+
+- :tada: Migrate the CloudTAK video player to video.js with WebRTC (WHEP) playback via media-infra as the default for RTSP/RTMP/SRT leases, falling back to HLS. Proxied HLS sources retain HLS as their default
+- :rocket: Populate read/write credentials in the WebRTC protocol URL of a lease, consistent with HLS
+- :bug: Pause HLS playback while the buffering overlay is shown instead of letting it run the buffer dry, and leave user initiated pauses alone
+- :rocket: Detect stalled WebRTC streams via the decoded frame counter & track mute state, falling back to HLS immediately when WebRTC never connects
+- :rocket: `API` Return the lease `proxy` source from `/api/video/active` so the player can choose the correct default protocol
+- :bug: Always show the Read/Publish selector in the Video Lease modal - SRT URLs differ by mode even when read/write security is disabled
+
+### v13.77.1 - 2026-08-31
+
+- :tada: Introduce fully native background location reporting
+
+### v13.77.0 - 2026-08-31
+
+- :tada: Introduce Offline TileJSON cache
+
+### v13.76.0 - 2026-08-30
+
+- :rocket: Move Attribution into Profile Overlay to further reduce needed API calls on startup
+- :rocket: TimeZone corrections for SunCalc - Closes: https://github.com/dfpc-coe/CloudTAK/issues/1686
+- :rocket: Use Mission GUID internally when possible
+- :arrow_up: Update to latest node-tak which increases the number of native GUID APIs
+- :bug: `API` Resolve stored Mission tokens by `mode_id` (GUID) instead of the Mission display name when looking up a user's Data Sync subscription - the web client has passed GUIDs to these endpoints since the route migration so the name lookup never matched
+- :rocket: `API` Subscribe user connections to Data Syncs by GUID on connect
+- :rocket: `API` Store the TAK Server Mission GUID on Data Syncs (`data.mission_guid`, populated on create & backfilled on next sync) and address the Mission by GUID for all Data Sync, Layer & Asset calls
+
+### v13.75.1 - 2026-08-28
+
+- :rocket: Add Touch Support for Lasso Mode
+
+### v13.75.0 - 2026-08-27
+
+- :tada: Introduce Task Specific UI for ETL Version & Permissions Management
+
+### v13.74.2 - 2026-08-27
+
+- :bug: The user's token should never be saved in the tile URL when creating an overlay from a hosted tileset - Closes: https://github.com/dfpc-coe/CloudTAK/issues/1683
+
+### v13.74.1 - 2026-08-27
+
+- :rocket: Keep profile WS online across brief drops
+- :rocket: Add POST location updates to profile service
+
+### v13.74.0 - 2026-08-26
+
+> [!WARNING]
+> If Using Connection API Tokens, the PR introduces the first version of API scopes
+> Layer ETLs are excempted from this change but connection tokens will need to be updated
+> with relevant scopes to continue working
+
+- :rocket: Introduce API Scopes to allow layer API Tokens to make calls to non-layer APIs
+- :rocket: Switch to Scalar API Docs which better surface authentication requirements than the earlier swagger UI
+
+### v13.73.1 - 2026-08-26
+
+- :bug: Don't display out of bounds or unknown alt - Closes: https://github.com/dfpc-coe/CloudTAK/issues/1707
+
+### v13.73.0 - 2026-08-26
+
+- :rocket: Introduce consistent puck colours with ATAK
+
+### v13.72.7 - 2026-08-26
+
+- :tada: Introduce Shapefile support for the Events Task
+
+### v13.72.6 - 2026-08-25
+
+- :rocket: Add Admin Hover effect to open Admin Menu
+- :rocket: Add Search Bar to Admin Integrations Page
+- :rocket: Make Overlays IndexDB backed so they immediately receive updates after an AtlasSync
+
 ### v13.72.5 - 2026-08-25
 
 - :rocket: Add database support for outgoing subscription types
